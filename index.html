@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Norway WTE & Aggregate Customers</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet CSS & JS for Mapping -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <style>
+        /* Custom styles for map and markers */
+        #map { height: 100%; width: 100%; z-index: 1; }
+        
+        .custom-marker {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            border: 2px solid white;
+        }
+        
+        .marker-wte { background-color: #ef4444; } /* Red for WTE */
+        .marker-high { background-color: #10b981; } /* Green for High Priority */
+        .marker-medium { background-color: #f59e0b; } /* Amber for Medium */
+        .marker-low { background-color: #6b7280; } /* Gray for Low */
+
+        /* Override Leaflet popup styles to use Tailwind */
+        .leaflet-popup-content-wrapper {
+            padding: 0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        .leaflet-popup-content {
+            margin: 0;
+            width: 300px !important;
+        }
+        
+        /* Custom Scrollbar for sidebar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans text-slate-800">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white p-4 shadow-md z-10 flex justify-between items-center shrink-0">
+        <div>
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="fa-solid fa-map-location-dot text-blue-400"></i>
+                Norway WTE & Aggregate Customers
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Interactive mapping of fly ash sources and potential aggregate off-takers</p>
+        </div>
+        <div class="flex gap-4 text-sm font-medium">
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-red-500"></span> WTE Plants</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span> High Priority</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Med Priority</div>
+            <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-gray-500"></span> Low Priority</div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden relative">
+        
+        <!-- Sidebar -->
+        <aside class="w-full md:w-80 lg:w-96 bg-white shadow-[4px_0_24px_rgba(0,0,0,0.05)] flex flex-col z-10 shrink-0 absolute md:relative h-full transition-transform transform -translate-x-full md:translate-x-0" id="sidebar">
+            <div class="p-5 overflow-y-auto flex-1 flex flex-col gap-6">
+                
+                <!-- Filters Section -->
+                <section>
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Filters</h2>
+                    
+                    <div class="space-y-4">
+                        <!-- Entity Type -->
+                        <div>
+                            <h3 class="font-semibold text-slate-700 mb-2 border-b pb-1">Entity Type</h3>
+                            <label class="flex items-center gap-2 cursor-pointer mb-1">
+                                <input type="checkbox" id="filter-wte" checked class="rounded text-blue-600 focus:ring-blue-500">
+                                <span>WTE Plants</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="filter-customers" checked class="rounded text-blue-600 focus:ring-blue-500">
+                                <span>Potential Customers</span>
+                            </label>
+                        </div>
+
+                        <!-- Customer Priority -->
+                        <div>
+                            <h3 class="font-semibold text-slate-700 mb-2 border-b pb-1">Customer Priority</h3>
+                            <label class="flex items-center gap-2 cursor-pointer mb-1">
+                                <input type="checkbox" class="priority-filter rounded text-blue-600 focus:ring-blue-500" value="High" checked>
+                                <span>High Priority</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer mb-1">
+                                <input type="checkbox" class="priority-filter rounded text-blue-600 focus:ring-blue-500" value="Medium" checked>
+                                <span>Medium Priority</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" class="priority-filter rounded text-blue-600 focus:ring-blue-500" value="Low" checked>
+                                <span>Low Priority</span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Data List Section -->
+                <section class="flex-1 flex flex-col min-h-[200px]">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between items-center">
+                        Visible Locations <span id="visible-count" class="bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full text-xs">0</span>
+                    </h2>
+                    <div id="location-list" class="space-y-2 overflow-y-auto flex-1 pr-1">
+                        <!-- List items populated by JS -->
+                    </div>
+                </section>
+
+            </div>
+        </aside>
+
+        <!-- Map Container -->
+        <main class="flex-1 relative w-full h-full">
+            <!-- Mobile Sidebar Toggle -->
+            <button id="mobile-toggle" class="md:hidden absolute top-4 left-4 z-[500] bg-white p-2 rounded shadow-md border border-slate-200 text-slate-700 hover:bg-slate-50">
+                <i class="fa-solid fa-bars"></i> Filters
+            </button>
+            <div id="map"></div>
+        </main>
+    </div>
+
+    <script>
+        // --- DATA INGESTION ---
+        // Extracted and structured from the provided CSV files
+        
+        const wteData = [
+            {
+                name: "Hafslund Celsio (Klemetsrud)",
+                operator: "Hafslund Celsio AS",
+                location: "Oslo",
+                address: "Brobekkveien 80, 0582 Oslo",
+                capacity: 350000,
+                flyAshLow: 7000,
+                flyAshHigh: 10500,
+                disposal: "NOAH AS, Langøya",
+                notes: "Norway's largest WTE. 152 GWh elec + 835 GWh heat/yr. Full-scale CCS project (Langskip).",
+                lat: 59.8258,
+                lng: 10.8406
+            },
+            {
+                name: "Haraldrud Energigjenvinningsanlegg",
+                operator: "Oslo kommune / REN Oslo",
+                location: "Oslo",
+                address: "Brobekkveien 87, 0582 Oslo",
+                capacity: 120000,
+                flyAshLow: 2400,
+                flyAshHigh: 3600,
+                disposal: "NOAH AS, Langøya",
+                notes: "Norway's oldest major WTE (1967).",
+                lat: 59.9322,
+                lng: 10.8250
+            },
+            {
+                name: "BIR Avfallsenergi",
+                operator: "BIR AS",
+                location: "Bergen",
+                address: "Rådal, Bergen",
+                capacity: 220000,
+                flyAshLow: 4400,
+                flyAshHigh: 6600,
+                disposal: "NOAH AS, Langøya",
+                notes: "Major plant in Western Norway.",
+                lat: 60.2858,
+                lng: 5.3340
+            },
+            {
+                name: "Returkraft",
+                operator: "Returkraft AS",
+                location: "Kristiansand",
+                address: "Tolsrødveien, Kristiansand",
+                capacity: 130000,
+                flyAshLow: 2600,
+                flyAshHigh: 3900,
+                disposal: "NOAH AS, Langøya",
+                notes: "Key plant in Southern Norway.",
+                lat: 58.1590,
+                lng: 8.0180
+            },
+            {
+                name: "Statkraft Varme (Heimdal)",
+                operator: "Statkraft Varme AS",
+                location: "Trondheim",
+                address: "Vestre Rosten 107, 7075 Tiller",
+                capacity: 220000,
+                flyAshLow: 4400,
+                flyAshHigh: 6600,
+                disposal: "NOAH AS, Langøya",
+                notes: "Trøndelag's primary regional WTE facility.",
+                lat: 63.3541,
+                lng: 10.3547
+            },
+            {
+                name: "Forus Energigjenvinning",
+                operator: "IVAR IKS",
+                location: "Sandnes",
+                address: "Forusbeen 200, 4313 Sandnes",
+                capacity: 110000,
+                flyAshLow: 2200,
+                flyAshHigh: 3300,
+                disposal: "NOAH AS, Langøya",
+                notes: "Serves the Stavanger/Sandnes region.",
+                lat: 58.8871,
+                lng: 5.7262
+            },
+            {
+                name: "FREVAR KF",
+                operator: "Fredrikstad kommune",
+                location: "Fredrikstad",
+                address: "Øra Næringsområde, Fredrikstad",
+                capacity: 80000,
+                flyAshLow: 1600,
+                flyAshHigh: 2400,
+                disposal: "NOAH AS, Langøya",
+                notes: "Co-located with extensive circular economy hub at Øra.",
+                lat: 59.1915,
+                lng: 10.9634
+            },
+            {
+                name: "Eidsiva Bioenergi (Trehørningen)",
+                operator: "Eidsiva Bioenergi AS",
+                location: "Hamar",
+                address: "Karihaugvegen 89, 2320 Furnes",
+                capacity: 80000,
+                flyAshLow: 1600,
+                flyAshHigh: 2400,
+                disposal: "NOAH AS, Langøya",
+                notes: "Serves the inland region (Innlandet).",
+                lat: 60.8126,
+                lng: 11.1277
+            },
+            {
+                name: "Østfold Energi (Borg)",
+                operator: "Østfold Energi AS",
+                location: "Sarpsborg",
+                address: "Vingulmorkveien 50, 1722 Sarpsborg",
+                capacity: 75000,
+                flyAshLow: 1500,
+                flyAshHigh: 2250,
+                disposal: "NOAH AS, Langøya",
+                notes: "Explores carbon capture in collaboration with Carbon Centric.",
+                lat: 59.2785,
+                lng: 11.1091
+            },
+            {
+                name: "Kvitebjørn Varme",
+                operator: "Kvitebjørn Energi",
+                location: "Tromsø",
+                address: "Tromsøysundvegen, Tromsø",
+                capacity: 60000,
+                flyAshLow: 1200,
+                flyAshHigh: 1800,
+                disposal: "NOAH AS, Langøya",
+                notes: "Crucial Arctic WTE node; supplies district heating to Tromsø.",
+                lat: 69.6713,
+                lng: 18.9950
+            },
+            {
+                name: "SAREN Energy",
+                operator: "SAREN Energy AS",
+                location: "Sarpsborg",
+                address: "Sarpsborg",
+                capacity: 80000,
+                flyAshLow: 1600,
+                flyAshHigh: 2400,
+                disposal: "NOAH AS, Langøya",
+                notes: "Industrial WTE processing, previously linked closely to Borregaard.",
+                lat: 59.2810,
+                lng: 11.1150
+            },
+            {
+                name: "Skagerak Varme (SES)",
+                operator: "Skagerak Energi",
+                location: "Skien",
+                address: "Rødmyr, Skien",
+                capacity: 50000,
+                flyAshLow: 1000,
+                flyAshHigh: 1500,
+                disposal: "NOAH AS, Langøya",
+                notes: "Regional plant for the Telemark area.",
+                lat: 59.1834,
+                lng: 9.6105
+            },
+            {
+                name: "BIO-EL",
+                operator: "BIO-EL AS",
+                location: "Elverum",
+                address: "Elverum",
+                capacity: 40000,
+                flyAshLow: 800,
+                flyAshHigh: 1200,
+                disposal: "NOAH AS, Langøya",
+                notes: "Combined biomass and specialized waste facility.",
+                lat: 60.8811,
+                lng: 11.5510
+            },
+            {
+                name: "Tafjord Kraftvarme",
+                operator: "Tafjord Kraft",
+                location: "Ålesund",
+                address: "Bingsa Næringspark, Ålesund",
+                capacity: 90000,
+                flyAshLow: 1800,
+                flyAshHigh: 2700,
+                disposal: "NOAH AS, Langøya",
+                notes: "Key processing center for Møre og Romsdal.",
+                lat: 62.4632,
+                lng: 6.3621
+            },
+            {
+                name: "Drammen Fjernvarme / Vardar",
+                operator: "Vardar AS",
+                location: "Drammen",
+                address: "Åssiden, Drammen",
+                capacity: 45000,
+                flyAshLow: 900,
+                flyAshHigh: 1350,
+                disposal: "NOAH AS, Langøya",
+                notes: "Partially relies on heat pumps and biomass, but processes some WTE.",
+                lat: 59.7431,
+                lng: 10.2045
+            },
+            {
+                name: "Senja Avfall",
+                operator: "Senja Avfall IKS",
+                location: "Finnsnes",
+                address: "Botnhågen, 9300 Finnsnes",
+                capacity: 30000,
+                flyAshLow: 600,
+                flyAshHigh: 900,
+                disposal: "NOAH AS, Langøya",
+                notes: "Mid-Troms regional waste handler.",
+                lat: 69.2312,
+                lng: 18.0401
+            },
+            {
+                name: "Kvitebjørn Bio-El",
+                operator: "Kvitebjørn Energi",
+                location: "Fredrikstad",
+                address: "Øra Næringsområde",
+                capacity: 40000,
+                flyAshLow: 800,
+                flyAshHigh: 1200,
+                disposal: "NOAH AS, Langøya",
+                notes: "Industrial-focused recovery operating alongside FREVAR.",
+                lat: 59.1950,
+                lng: 10.9700
+            },
+            {
+                name: "Hallingdal Renovasjon (Kleivi)",
+                operator: "Hallingdal Renovasjon IKS",
+                location: "Ål",
+                address: "Kleivi Næringspark, 3570 Ål",
+                capacity: 25000,
+                flyAshLow: 500,
+                flyAshHigh: 750,
+                disposal: "NOAH AS, Langøya",
+                notes: "Serves the mountainous central regions.",
+                lat: 60.6277,
+                lng: 8.5606
+            }
+        ];
+
+        const customerData = [
+            {
+                company: "Consolis Spenncon AS",
+                segment: "Hollow Core Slabs",
+                hq: "Oslo",
+                products: "Hollow core slabs, precast frames, stairs",
+                priority: "High",
+                revenue: "~2,200 (est.)",
+                employees: "~600",
+                trend: "↓ Declining",
+                notes: "Norway's largest precast producer. Sustainability push—actively testing low-carbon binders. Priority target.",
+                lat: 59.9139,
+                lng: 10.7522
+            },
+            {
+                company: "Contiga AS",
+                segment: "Hollow Core Slabs",
+                hq: "Askøy (Bergen)",
+                products: "Hollow core slabs, precast walls, stairs",
+                priority: "High",
+                revenue: "~1,800 (est.)",
+                employees: "~500",
+                trend: "↓ Declining",
+                notes: "Part of Heidelberg Materials. State-of-the-art automated factory. Strong sustainability agenda. IPHA member.",
+                lat: 60.3931,
+                lng: 5.3221
+            },
+            {
+                company: "Loe Betongelementer AS",
+                segment: "Hollow Core Slabs",
+                hq: "Loen / Vestland",
+                products: "Hollow core slabs, precast elements",
+                priority: "Medium",
+                revenue: "N/A",
+                employees: "~80",
+                trend: "→ Stable",
+                notes: "Private, medium-sized operations.",
+                lat: 61.8667,
+                lng: 6.8333
+            },
+            {
+                company: "Veidekke ASA",
+                segment: "Patching / Infrastructure",
+                hq: "Oslo",
+                products: "Road construction, infrastructure contracting",
+                priority: "Low",
+                revenue: "~35,000",
+                employees: "~8,000",
+                trend: "→ Stable",
+                notes: "Norway's largest construction contractor. Own asphalt/batching capacity. COIN research partner.",
+                lat: 59.9200, // Slightly offset from Spenncon for visibility
+                lng: 10.7400
+            },
+            {
+                company: "AF Gruppen ASA",
+                segment: "Patching / Infrastructure",
+                hq: "Oslo",
+                products: "Infrastructure, civil, demolition",
+                priority: "Low",
+                revenue: "~30,000",
+                employees: "~5,000",
+                trend: "→ Stable",
+                notes: "Strong sustainability and circular economy targets. Demolition arm means existing circular mindset.",
+                lat: 59.9100, // Slightly offset
+                lng: 10.7600
+            },
+            {
+                company: "Skanska Norge AS",
+                segment: "Patching / Infrastructure",
+                hq: "Oslo",
+                products: "Road and infrastructure contracting",
+                priority: "Low",
+                revenue: "~17,000",
+                employees: "~3,500",
+                trend: "→ Stable",
+                notes: "Own batching capacity. Group-level procurement.",
+                lat: 59.9050, // Slightly offset
+                lng: 10.7550
+            },
+            {
+                company: "Statens Vegvesen (SVV)",
+                segment: "Patching / Infrastructure",
+                hq: "Lillehammer",
+                products: "Road maintenance, patching",
+                priority: "Low",
+                revenue: "Public authority",
+                employees: "~7,500",
+                trend: "→ Stable",
+                notes: "Norway's national road authority. Approves aggregate use.",
+                lat: 61.1153,
+                lng: 10.4663
+            }
+        ];
+
+        // --- MAP INITIALIZATION ---
+        
+        // Initialize Map centered on Norway
+        const map = L.map('map', {
+            zoomControl: false // Move zoom control
+        }).setView([60.8, 8.5], 6);
+
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // Add CartoDB Positron base layer (clean, modern map style)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        // --- MARKERS & LAYERS ---
+
+        const markers = []; // Store all markers for filtering
+
+        // Custom Icon Generator
+        const createCustomIcon = (type, priority) => {
+            let bgColorClass = '';
+            let iconClass = '';
+            let size = [36, 36];
+
+            if (type === 'WTE') {
+                bgColorClass = 'marker-wte';
+                iconClass = 'fa-industry';
+                size = [40, 40]; // Slightly larger for WTE
+            } else {
+                iconClass = 'fa-building';
+                if (priority === 'High') bgColorClass = 'marker-high';
+                else if (priority === 'Medium') bgColorClass = 'marker-medium';
+                else bgColorClass = 'marker-low';
+            }
+
+            return L.divIcon({
+                className: 'custom-icon-wrapper',
+                html: `<div class="custom-marker ${bgColorClass} w-full h-full text-sm">
+                        <i class="fa-solid ${iconClass}"></i>
+                       </div>`,
+                iconSize: size,
+                iconAnchor: [size[0]/2, size[1]/2],
+                popupAnchor: [0, -size[1]/2]
+            });
+        };
+
+        // Render WTE Plants
+        wteData.forEach((plant, index) => {
+            const marker = L.marker([plant.lat, plant.lng], { 
+                icon: createCustomIcon('WTE', null) 
+            });
+
+            const popupContent = `
+                <div class="bg-slate-900 text-white p-4">
+                    <div class="flex items-center gap-2 text-red-400 text-xs font-bold uppercase tracking-wider mb-1">
+                        <i class="fa-solid fa-industry"></i> WTE Plant
+                    </div>
+                    <h3 class="text-lg font-bold">${plant.name}</h3>
+                    <p class="text-sm text-slate-300">${plant.operator}</p>
+                </div>
+                <div class="p-4 bg-white text-slate-800">
+                    <div class="grid grid-cols-2 gap-3 mb-3 text-sm">
+                        <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                            <span class="block text-xs text-slate-400">Capacity</span>
+                            <span class="font-semibold">${plant.capacity.toLocaleString()} t/yr</span>
+                        </div>
+                        <div class="bg-slate-50 p-2 rounded border border-slate-100">
+                            <span class="block text-xs text-slate-400">Est. Fly Ash</span>
+                            <span class="font-semibold">${plant.flyAshLow.toLocaleString()} - ${plant.flyAshHigh.toLocaleString()} t</span>
+                        </div>
+                    </div>
+                    <p class="text-sm mb-2"><i class="fa-solid fa-truck-ramp-box text-slate-400 w-5"></i> <strong>Disposal:</strong> ${plant.disposal}</p>
+                    <p class="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">${plant.notes}</p>
+                </div>
+            `;
+
+            marker.bindPopup(popupContent);
+            
+            // Store metadata for filtering
+            marker.meta = { type: 'WTE', data: plant, id: `wte-${index}` };
+            markers.push(marker);
+            marker.addTo(map);
+        });
+
+        // Render Customers
+        customerData.forEach((customer, index) => {
+            const marker = L.marker([customer.lat, customer.lng], { 
+                icon: createCustomIcon('Customer', customer.priority) 
+            });
+
+            let priorityColor = customer.priority === 'High' ? 'text-emerald-500' : 
+                                customer.priority === 'Medium' ? 'text-amber-500' : 'text-slate-500';
+
+            const popupContent = `
+                <div class="bg-slate-900 text-white p-4 border-b-4 ${customer.priority === 'High' ? 'border-emerald-500' : (customer.priority === 'Medium' ? 'border-amber-500' : 'border-slate-500')}">
+                    <div class="flex justify-between items-start mb-1">
+                        <div class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <i class="fa-solid fa-building"></i> Customer
+                        </div>
+                        <span class="${priorityColor} text-xs font-bold px-2 py-0.5 rounded bg-slate-800 border border-slate-700">
+                            ${customer.priority} Priority
+                        </span>
+                    </div>
+                    <h3 class="text-lg font-bold">${customer.company}</h3>
+                    <p class="text-sm text-slate-300">${customer.segment}</p>
+                </div>
+                <div class="p-4 bg-white text-slate-800">
+                    <p class="text-sm mb-2"><i class="fa-solid fa-box text-slate-400 w-5"></i> ${customer.products}</p>
+                    <p class="text-sm mb-2"><i class="fa-solid fa-coins text-slate-400 w-5"></i> <strong>Rev:</strong> ${customer.revenue} MNOK</p>
+                    <p class="text-sm mb-2"><i class="fa-solid fa-chart-line text-slate-400 w-5"></i> <strong>Trend:</strong> ${customer.trend}</p>
+                    <p class="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">${customer.notes}</p>
+                </div>
+            `;
+
+            marker.bindPopup(popupContent);
+            
+            // Store metadata for filtering
+            marker.meta = { type: 'Customer', data: customer, id: `cust-${index}` };
+            markers.push(marker);
+            marker.addTo(map);
+        });
+
+        // --- FILTERING LOGIC ---
+        
+        const filterWteInput = document.getElementById('filter-wte');
+        const filterCustomersInput = document.getElementById('filter-customers');
+        const priorityInputs = document.querySelectorAll('.priority-filter');
+        const locationListEl = document.getElementById('location-list');
+        const visibleCountEl = document.getElementById('visible-count');
+
+        function updateMapAndList() {
+            const showWte = filterWteInput.checked;
+            const showCustomers = filterCustomersInput.checked;
+            
+            // Get active priorities
+            const activePriorities = Array.from(priorityInputs)
+                .filter(input => input.checked)
+                .map(input => input.value);
+
+            let visibleCount = 0;
+            locationListEl.innerHTML = '';
+
+            markers.forEach(marker => {
+                let isVisible = false;
+
+                if (marker.meta.type === 'WTE' && showWte) {
+                    isVisible = true;
+                } else if (marker.meta.type === 'Customer' && showCustomers) {
+                    if (activePriorities.includes(marker.meta.data.priority)) {
+                        isVisible = true;
+                    }
+                }
+
+                if (isVisible) {
+                    if (!map.hasLayer(marker)) marker.addTo(map);
+                    visibleCount++;
+                    addToList(marker);
+                } else {
+                    map.removeLayer(marker);
+                }
+            });
+
+            visibleCountEl.textContent = visibleCount;
+        }
+
+        function addToList(marker) {
+            const el = document.createElement('div');
+            el.className = 'p-3 bg-slate-50 border border-slate-200 rounded cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition-colors duration-150';
+            
+            if (marker.meta.type === 'WTE') {
+                el.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="w-2 h-2 rounded-full bg-red-500"></span>
+                        <span class="text-xs font-bold text-slate-500 uppercase">WTE Plant</span>
+                    </div>
+                    <h4 class="font-semibold text-slate-800 text-sm">${marker.meta.data.name}</h4>
+                    <p class="text-xs text-slate-500 truncate">${marker.meta.data.location}</p>
+                `;
+            } else {
+                let pColor = marker.meta.data.priority === 'High' ? 'bg-emerald-500' : 
+                             marker.meta.data.priority === 'Medium' ? 'bg-amber-500' : 'bg-slate-500';
+                
+                el.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full ${pColor}"></span>
+                            <span class="text-xs font-bold text-slate-500 uppercase">${marker.meta.data.segment.split('/')[0]}</span>
+                        </div>
+                    </div>
+                    <h4 class="font-semibold text-slate-800 text-sm">${marker.meta.data.company}</h4>
+                    <p class="text-xs text-slate-500 truncate">${marker.meta.data.hq}</p>
+                `;
+            }
+
+            // Click list item to zoom to marker and open popup
+            el.addEventListener('click', () => {
+                const latlng = marker.getLatLng();
+                map.flyTo(latlng, 12, { duration: 1 });
+                marker.openPopup();
+                
+                // On mobile, close sidebar after clicking
+                if (window.innerWidth < 768) {
+                    toggleMobileSidebar();
+                }
+            });
+
+            locationListEl.appendChild(el);
+        }
+
+        // Attach event listeners to filters
+        filterWteInput.addEventListener('change', updateMapAndList);
+        filterCustomersInput.addEventListener('change', updateMapAndList);
+        priorityInputs.forEach(input => input.addEventListener('change', updateMapAndList));
+
+        // Initial render
+        updateMapAndList();
+
+        // --- MOBILE SIDEBAR TOGGLE ---
+        const mobileToggleBtn = document.getElementById('mobile-toggle');
+        const sidebar = document.getElementById('sidebar');
+        let sidebarOpen = false;
+
+        function toggleMobileSidebar() {
+            sidebarOpen = !sidebarOpen;
+            if (sidebarOpen) {
+                sidebar.classList.remove('-translate-x-full');
+            } else {
+                sidebar.classList.add('-translate-x-full');
+            }
+        }
+
+        mobileToggleBtn.addEventListener('click', toggleMobileSidebar);
+
+    </script>
+</body>
+</html>
